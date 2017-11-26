@@ -339,7 +339,10 @@ function successActions(a, i) {
 
 function fetchStoredAwesomeDefaults() {
   let savedDefaults = GM_getValue("awesomeDefaults", "");
-  return new Map(JSON.parse(savedDefaults));
+  if (savedDefaults) {
+    return new Map(JSON.parse(savedDefaults));
+  }
+  return new Map();
 }
 
 function deleteAwesomeDefault(a) {
