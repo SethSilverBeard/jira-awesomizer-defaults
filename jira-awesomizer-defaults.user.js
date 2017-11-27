@@ -83,7 +83,7 @@ function main() {
 
 function createTrulyAwesomeDefaults(defaultsMap) {
   //setup promise which waits for the "Summary" element to be visible before trying to apply, so JIRA triggers all cascade properly
-  let promise = waitForCondition(function() { return $('#summary').is(":visible :enabled");});
+  let promise = waitForCondition(function() { return AJS.$('#summary').is(":visible :enabled");});
   
   let awesomeDefaults = [];
   //find all labels on page
