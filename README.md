@@ -1,5 +1,5 @@
 # Jira Awesomizer Defaults
-#### Making JIRA Awesome Again!
+#### Make JIRA Awesome Again!
 -----------------------------------------------------------
 Are you tired of typing in the same things over and over again when you create a new issue in JIRA?  Do you feel like a lab monkey, but you do not identify as a monkey? If so, then JIRA Awesomizer Defaults is for you!
 
