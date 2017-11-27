@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Jira Awesomizer Defaults
 // @namespace    https://github.com/SethSilverBeard
-// @version      1.0.0
+// @version      1.0.1
 // @description  Automatically fills in common JIRA values and allows you to override defaults
 // @author       SethSilverBeard
 // @require      https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/6.18.2/babel.js
@@ -83,7 +83,7 @@ function main() {
 
 function createTrulyAwesomeDefaults(defaultsMap) {
   //setup promise which waits for the "Summary" element to be visible before trying to apply, so JIRA triggers all cascade properly
-  let promise = waitForCondition(function() { return AJS.$('#summary').is(":visible :enabled");});
+  let promise = waitForCondition(function() { return AJS.$('.jira-dialog-content #summary').is(":visible :enabled");});
   
   let awesomeDefaults = [];
   //find all labels on page
@@ -320,7 +320,7 @@ function delay(ms) {
 }
 
 function findPossibleTextBox(idLabelPointsTo) {
-  let possibleTextBox = (document.querySelector('#' + idLabelPointsTo + '-textarea') || document.querySelector('#' + idLabelPointsTo + '-field'));
+  let possibleTextBox = (document.querySelector('.jira-dialog-content #' + idLabelPointsTo + '-textarea') || document.querySelector('.jira-dialog-content #' + idLabelPointsTo + '-field'));
   if (!possibleTextBox) {
     return false;
   }
