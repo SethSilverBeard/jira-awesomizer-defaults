@@ -7,8 +7,8 @@
 // @require      https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/6.18.2/babel.js
 // @require      https://cdnjs.cloudflare.com/ajax/libs/babel-polyfill/6.16.0/polyfill.js
 // @require      https://use.fontawesome.com/8fca914d55.js
-// @include      http://jira.*
-// @include      https://jira.*
+// @include      http://jira*.*
+// @include      https://jira*.*
 // @run-at       document-idle
 // @grant        GM_log
 // @grant        GM_setValue
