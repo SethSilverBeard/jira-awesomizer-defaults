@@ -4,7 +4,7 @@ Are you tired of typing in the same things over and over again when you create a
 
 What is it?
 ----------------
-A TamperMonkey (GreaseMonkey) script that fills in fields automatically when you create a new Issue. This script adds a "Save" icon next to each field in the "Create Issue" screens. Saved values are stored locally in the browser per user. 
+A TamperMonkey (GreaseMonkey) script that fills in fields automatically when you create a new Issue. This script adds a "Save" icon next to each field in the "Create Issue" screens. Saved values are stored locally in the browser. 
 
 ![Jira Awesomizer screenshot](img/screenshot.png?raw=true "Screenshot")
 
