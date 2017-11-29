@@ -17,7 +17,7 @@ How to Install
 1. Install TamperMonkey in Chrome (Should work with FF, but havent tested)
 1. In Chrome, visit https://github.com/SethSilverBeard/jira-awesomizer-defaults/raw/master/jira-awesomizer-defaults.user.js and click "Install"
 1. Go to your JIRA website and click "Create Issue". You will see a lock icon next to each field to save it!
-1. If you do not see lock icons, you probably need to change the `@include` directive in the script to match your URL. Currently it only matches URLS starting with `jira.*`
+1. If you do not see lock icons, you probably need to change the `@include` directive in the script to match your URL. Currently it only matches URLS starting with `jira*.*`
 
 
 FAQs
