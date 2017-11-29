@@ -14,7 +14,6 @@ Every field I could find and test against, including multi-select and single-sel
 
 How to Install
 ------------
-1. Make sure JIRA's installed.  Download at https://www.atlassian.com/software/jira/download
 1. Install TamperMonkey in Chrome (Should work with FF, but havent tested)
 1. In Chrome, visit https://github.com/SethSilverBeard/jira-awesomizer-defaults/raw/master/jira-awesomizer-defaults.user.js and click "Install"
 1. Go to your JIRA website and click "Create Issue". You will see a lock icon next to each field to save it!
@@ -25,7 +24,7 @@ FAQs
 ----------
 1. Shouldn't JIRA have this already?
 
-Yes! But they don't. It's been 13 years since someone requested this feature: https://jira.atlassian.com/browse/JRASERVER-4812
+Yes! But they don't. It's been 13 years since someone requested this feature: https://jira.atlassian.com/browse/JRASERVER-4812. Rather than wait umpteen more years, I've created one for everyone to use today.
 
 2. It's not working!
 
