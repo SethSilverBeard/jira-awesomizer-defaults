@@ -25,36 +25,93 @@ var inline_src = (<><![CDATA[
   /* jshint esversion: 6 */
   
   class AwesomeDefault {
-    constructor(label, text, value) {
-      this.label = label;  //Label users see, such as 'Sprint', 'Division', 'Original Estimate', etc
-      this.text = text;  //Text as user sees it
-      this.value = value;  //Value set which corresponds with text value above
-      
+
+    constructor(labelNode, isVisiblePromise) {
+      this.label = labelNode.textContent.replace(/Required$/,'');  //Label users see, such as 'Sprint', 'Division', 'Original Estimate', etc
+      this.text = '';  //Text as user sees it
+      this.value = '';  //Value set which corresponds with text value above
+
       //DOM inputs corresponding to above, these arent ever serialized
-      this.labelNode = ''; //label node
+      this.labelNode = labelNode;
       this.textNode = '';  //node corresponding to textbox
-      this.valueNode = '';  //backend node corresponding to visual textNode. May be same as textNode.
-      
+      this.valueNode = document.querySelector('#' + labelNode.getAttribute("for"));
       this.saveButton = '';
-      this.getContainer = function() {
-        //parent is different depending if you're using "All" or "Custom" under "Configure Fields" button
-        if (this.labelNode.parentElement.parentElement.id === 'qf-field-' + this.labelNode.getAttribute("for")) {
-          return this.labelNode.parentElement.parentElement;
-        }
-        return this.labelNode.parentElement;
-      };
-      this.getVal = function() {
-        return AJS.$(this.valueNode).val();
-      };
-      this.getText = function() {
-        //gotta do gymnastics to get the actual text for things like "Sprint 5, Sprint 6" etc
-        let possibleArray = AJS.$(this.textNode).siblings(".representation").find('.value-text').map(function() { return AJS.$(this).text(); }).get();
-        if (possibleArray.length) {
-          return possibleArray;
-        }
-        return this.textNode.value;
-      };
+      this.promise = isVisiblePromise;  //add to object so anything time dependent can use it.
+
+      if (!this.valueNode) {
+        GM_log('Warning: Label [' + this.label + '] points to inputField id [' + this.labelNode.getAttribute("for") + '] but this field doesnt exist....skipping field.');
+        return;
+      }
+      //This will branch off original promise, so they all run in parallel once summary is visible.
+      //Do NOT need to run them serially by doing promise = promise.then() because findPossibleTextBox does not have any async operations.
+      //See https://stackoverflow.com/questions/29853578/understanding-javascript-promises-stacks-and-chaining
+      let self = this;
+      this.promise.then(function() {
+        self.textNode = self.findPossibleTextBox(self.valueNode.id) || self.valueNode;
+        return self;
+      });
     }
+        
+    findPossibleTextBox(idLabelPointsTo) {
+      let possibleTextBox = (document.querySelector('.jira-dialog-content #' + idLabelPointsTo + '-textarea') || document.querySelector('.jira-dialog-content #' + idLabelPointsTo + '-field'));
+      if (!possibleTextBox) {
+        return false;
+      }
+      return possibleTextBox;
+    }
+
+    getContainer() {
+      //parent is different depending if you're using "All" or "Custom" under "Configure Fields" button
+      if (this.labelNode.parentElement.parentElement.id === 'qf-field-' + this.labelNode.getAttribute("for")) {
+        return this.labelNode.parentElement.parentElement;
+      }
+      return this.labelNode.parentElement;
+    }
+
+    getVal() {
+      return AJS.$(this.valueNode).val();
+    }
+
+    getText() {
+      //gotta do gymnastics to get the actual text for things like "Sprint 5, Sprint 6" etc
+      let possibleArray = AJS.$(this.textNode).siblings(".representation").find('.value-text').map(function() { return AJS.$(this).text(); }).get();
+      if (possibleArray.length) {
+        return possibleArray;
+      }
+      return this.textNode.value;
+    }
+
+    applyDefault() {
+      let p = this.promise || Promise.resolve();
+      let self = this;
+
+      return p.then(function() {
+        console.log(self.text, "Invisible?", !AJS.$(self.textNode).is(":visible"));
+        if (!self.text || !AJS.$(self.textNode).is(":visible")) { //do nothing on empty or invisible values
+          return;
+        }
+        if (isEqual(self.value, self.getVal())) { //also do nothing if value's already set, useful when switching between story, bug, task, etc
+          return self.value;
+        }
+        let jiraObject = AJS.$(self.valueNode).data("jiraBackingObject");
+        if (!jiraObject) {  //simple fields where we can just set the display text and backing object
+          self.textNode.value = self.text;
+          AJS.$(self.valueNode).val(self.value);
+        } else {  //fanciness for AJAX selections like "Sprint", "Assignee", "Fix Versions", etc
+          if (Array.isArray(self.text)) {
+            self.text.forEach(function(desiredText, i) {
+              p = setItemFromSuggestions(jiraObject, desiredText, self.value[i], self);  //TODO: reassigning p to make this serial is weird, fix this.
+            }); 
+          } else {
+            p = setItemFromSuggestions(jiraObject, self.text, self.value, self);
+          }
+        }
+        return p.then(function(descriptorWeFound) {
+          return self.getVal();
+        });
+      });
+    }
+
   }
 
 var excludedFields = ['Project', 'Issue Type', 'Summary', 'Create another'];
@@ -77,52 +134,10 @@ JIRA.bind(JIRA.Events.NEW_CONTENT_ADDED, function(event,content,q) {
 
 function main() {
   let defaults = fetchStoredAwesomeDefaults();
-  createTrulyAwesomeDefaults(defaults)
-    .then(applyAwesomeDefaults);
-}
-
-function createTrulyAwesomeDefaults(defaultsMap) {
-  //setup promise which waits for the "Summary" element to be visible before trying to apply, so JIRA triggers all cascade properly
-  let promise = waitForCondition(function() { return AJS.$('.jira-dialog-content #summary').is(":visible :enabled");});
-  
-  let awesomeDefaults = [];
-  //find all labels on page
-  for (let label of document.querySelectorAll('.jira-dialog-content label')) {
-    //skip excluded fields like "summary"
-    let labelKey = label.textContent.replace(/Required$/,'');
-    if (excludedFields.indexOf(labelKey) > -1) {
-      continue;
-    }
-    let a = new AwesomeDefault(labelKey, '', '');
-    //load up possibly stored defaults for this one
-    let storedValue = defaultsMap.get(labelKey);
-    if (storedValue) {
-      GM_log("Creating preloaded AwesomeDefault for " + labelKey + " with desired value " + storedValue.text);
-      a = new AwesomeDefault(labelKey, storedValue.text, storedValue.value);
-    }
-    a.labelNode = label;
-    a.valueNode = document.querySelector('#' + label.getAttribute("for"));
-    if (!a.valueNode) {
-      GM_log('Warning: Label [' + label + '] points to inputField id [' + label.getAttribute("for") + '] but this field doesnt exist....skipping field.');
-      continue;
-    }
-    //This will branch off original promise, so they all run in parallel once summary is visible.
-    //Do NOT need to run them serially by doing promise = promise.then() because findPossibleTextBox does not have any async operations.
-    //See https://stackoverflow.com/questions/29853578/understanding-javascript-promises-stacks-and-chaining
-    promise = promise.then(function() {
-      a.textNode = findPossibleTextBox(a.valueNode.id) || a.valueNode;
-    });
-    awesomeDefaults.push(a);
-  }
-  return promise.then(function() {
-    return awesomeDefaults;
-  });
-}
-
-function applyAwesomeDefaults(awesomeDefaults) {
+  let awesomeDefaults = createTrulyAwesomeDefaults(defaults);
   let i = 0;
   for (let a of awesomeDefaults) {
-    setField(a).then(function (valueSet) {
+    a.applyDefault().then(function (valueSet) {
       if (valueSet) {
         successActions(a, i++);
       }
@@ -132,30 +147,31 @@ function applyAwesomeDefaults(awesomeDefaults) {
   }
 }
 
-function setField(awesomeDefault) {
-  let p = Promise.resolve();
-  if (!awesomeDefault.text || !AJS.$(awesomeDefault.textNode).is(":visible")) { //do nothing on empty or invisible values
-    return p;
-  }
-  if (isEqual(awesomeDefault.value, awesomeDefault.getVal())) { //also do nothing if value's already set, useful when switching between story, bug, task, etc
-    return p.then(function() {return awesomeDefault.value;});
-  }
-  let jiraObject = AJS.$(awesomeDefault.valueNode).data("jiraBackingObject");
-  if (!jiraObject) {  //simple fields where we can just set the display text and backing object
-    awesomeDefault.textNode.value = awesomeDefault.text;
-    AJS.$(awesomeDefault.valueNode).val(awesomeDefault.value);
-  } else {  //fanciness for AJAX selections like "Sprint", "Assignee", "Fix Versions", etc
-    if (Array.isArray(awesomeDefault.text)) {
-      awesomeDefault.text.forEach(function(desiredText, i) {
-        p = setItemFromSuggestions(jiraObject, desiredText, awesomeDefault.value[i], awesomeDefault);
-      });
-    } else {
-      p = setItemFromSuggestions(jiraObject, awesomeDefault.text, awesomeDefault.value, awesomeDefault);
+function createTrulyAwesomeDefaults(defaultsMap) {
+  //setup promise which waits for the "Summary" element to be visible before trying to apply, so JIRA triggers all cascade properly
+  let promise = waitForCondition(function() { return AJS.$('.jira-dialog-content #summary').is(":visible :enabled");});
+  
+  let awesomeDefaults = [];
+  //find all labels on page
+  for (let labelNode of document.querySelectorAll('.jira-dialog-content label')) {
+    let a = new AwesomeDefault(labelNode, promise);
+    //skip excluded fields like "summary"
+    let labelKey = a.label;
+    if (excludedFields.indexOf(labelKey) > -1) {
+      continue;
     }
+    //load up possibly stored defaults for this one
+    let storedValue = defaultsMap.get(labelKey);
+    if (storedValue) {
+      GM_log("Creating preloaded AwesomeDefault for " + labelKey + " with desired value " + storedValue.text);
+      a.text = storedValue.text;
+      a.value = storedValue.value;
+    }
+    awesomeDefaults.push(a);
   }
-  return p.then(function(descriptorWeFound) {
-    return awesomeDefault.getVal();
-  });
+  // return promise.then(function() {
+  return awesomeDefaults;
+  // });
 }
 
 function setItemFromSuggestions(jiraObject, text, value, a) {
@@ -317,14 +333,6 @@ function delay(ms) {
       resolve();
     }, ms);
   });
-}
-
-function findPossibleTextBox(idLabelPointsTo) {
-  let possibleTextBox = (document.querySelector('.jira-dialog-content #' + idLabelPointsTo + '-textarea') || document.querySelector('.jira-dialog-content #' + idLabelPointsTo + '-field'));
-  if (!possibleTextBox) {
-    return false;
-  }
-  return possibleTextBox;
 }
 
 function successActions(a, i) {
