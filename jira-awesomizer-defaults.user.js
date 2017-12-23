@@ -34,7 +34,7 @@ var inline_src = (<><![CDATA[
       //DOM inputs corresponding to above, these arent ever serialized
       this.labelNode = labelNode;
       this.textNode = '';  //node corresponding to textbox
-      this.valueNode = document.querySelector('#' + labelNode.getAttribute("for"));
+      this.valueNode = document.querySelector('#' + labelNode.getAttribute("for"));//.split('-',1)[0]);
       this.saveButton = '';
       this.promise = isVisiblePromise;  //add to object so anything time dependent can use it.
 
@@ -46,6 +46,9 @@ var inline_src = (<><![CDATA[
       //Do NOT need to run them serially by doing promise = promise.then() because findPossibleTextBox does not have any async operations.
       //See https://stackoverflow.com/questions/29853578/understanding-javascript-promises-stacks-and-chaining
       let self = this;
+      //expose to the outside world in case anyone wants access to an AwesomeDefault
+      AJS.$(this.valueNode).data('awesomeDefault', this);
+
       this.promise.then(function() {
         self.textNode = self.findPossibleTextBox(self.valueNode.id) || self.valueNode;
         return self;
@@ -97,19 +100,143 @@ var inline_src = (<><![CDATA[
         if (!jiraObject) {  //simple fields where we can just set the display text and backing object
           self.textNode.value = self.text;
           AJS.$(self.valueNode).val(self.value);
+          return self.getVal();
         } else {  //fanciness for AJAX selections like "Sprint", "Assignee", "Fix Versions", etc
+          let itemPromise = Promise.resolve();
           if (Array.isArray(self.text)) {
             self.text.forEach(function(desiredText, i) {
-              p = setItemFromSuggestions(jiraObject, desiredText, self.value[i], self);  //TODO: reassigning p to make this serial is weird, fix this.
-            }); 
+              itemPromise = itemPromise.then(()=>self.setItemFromSuggestions(jiraObject, desiredText, self.value[i], self));  //TODO: reassigning p to make this serial is weird, fix this.
+            });
           } else {
-            p = setItemFromSuggestions(jiraObject, self.text, self.value, self);
+            itemPromise = self.setItemFromSuggestions(jiraObject, self.text, self.value, self);
           }
+          return itemPromise.then(()=>self.getVal());
         }
-        return p.then(function(descriptorWeFound) {
-          return self.getVal();
-        });
       });
+    }
+
+    setItemFromSuggestions(jiraObject, text, value, a) {
+      //unwrap any array structures jQuery val() might have wrapped since this is dealing with single values
+      if (Array.isArray(text)) {
+        text = text[0];
+      }
+      if (Array.isArray(value)) {
+        value = value[0];
+      }
+      //turn on 'aus-ss-edit' mode, which AJAX queries check before executing REST stuff
+      jiraObject.$container.addClass("aui-ss-editing");
+      jiraObject.$field.val(text); //set text value to limit suggestions
+      return Promise.resolve(jiraObject.requestSuggestions())   //converts jQuery deferred to ES6 promise
+        .then(function(suggestions){
+          jiraObject.$container.removeClass("aui-ss-editing");
+          jiraObject.$field.val(''); //clear text value since no longer needed for suggestions
+          //Epic Link seems to put it at the end of array, so search backwards through the suggestions[] instead until we find value match
+          for (let i=suggestions.length-1; i >= 0; i--) {
+            debugger;
+            console.log(suggestions[i].properties.items);
+            for (let j=0; j < suggestions[i].properties.items.length; j++) {
+              let item = suggestions[i].properties.items[j];
+              if (item.properties.value === value) {
+                //single-select
+                if (jiraObject.setSelection) {
+                  jiraObject.setSelection(item);
+                } else { //multi-select
+                  jiraObject.addItem(item);
+                }
+                return item;
+              }
+            }
+          }
+        });
+    }
+
+    addSaveButton() {
+      let a = this;
+      let saveButton = document.createElement('button');
+      //determine if it's a green locked icon or unlocked icon
+      let icon = null;
+      if (a.value && isEqual(a.value, a.getVal())) {
+        icon = createSavedIcon();
+      } else {
+        icon = createUnsavedIcon();
+      }
+      saveButton.appendChild(icon);
+      
+      let changeFunction = function(e) {
+        setTimeout(function() {
+          if (!a.value) {  //if nothing saved to begin with, dont bother
+            return;
+          }
+          if (!isEqual(a.value, a.getVal())) {
+            GM_log("Houston, we have a CHANGE from the original! Orig [" + a.value + "] and new [" + a.getVal() + "]");
+            a.saveButton.innerHTML = '';
+            a.saveButton.appendChild(createUnsavedIcon());
+            a.getContainer().style.backgroundColor = '#D3D3D3'; //light gray to indicate changed but unsaved
+          } else {
+            a.saveButton.innerHTML = '';
+            a.saveButton.appendChild(createSavedIcon());
+            a.getContainer().style.backgroundColor = '#98ff98'; //minty green
+          }
+        }, 20);
+      };
+      
+      //gray out box when value changes to indicate unsaved changes
+      AJS.$(a.textNode).bind('change', changeFunction);
+      AJS.$(a.valueNode).bind('selected unselect', changeFunction); //for multi-selects
+      
+      saveButton.onclick = function (event) {
+        event.preventDefault();
+        if (AJS.$(a.saveButton.firstChild).hasClass('fa-lock')) {
+          deleteAwesomeDefault(a);
+        } else if (AJS.$(a.saveButton.firstChild).hasClass('fa-unlock-alt')) {
+          saveAwesomeDefault(a);
+        }
+        
+      };
+      //visual fix for the longer fields so it inserts after parent rather than input node directly
+      if ( (AJS.$(a.textNode).hasClass('text') && AJS.$(a.textNode).parent().hasClass('long-field')) || (a.label === 'Priority')) {
+        AJS.$(a.textNode).parent().after("&nbsp;", saveButton);
+      } else {
+        AJS.$(a.textNode).nextUntil('div').andSelf().last().after("&nbsp;", saveButton);
+      }
+      a.saveButton = saveButton;
+      return saveButton;
+    }
+
+    addPrintButton(prevElement) {
+      let a = this;
+      let printButton = document.createElement('button');
+      let icon = document.createElement('i');
+      icon.className = 'fa fa-print fa-lg';
+      printButton.appendChild(icon);
+      printButton.onclick = function(event) {
+        event.preventDefault();
+        let saveMap = fetchStoredAwesomeDefaults();
+        alert ('Saved awesomeness:\n' + JSON.stringify(saveMap));
+      };
+      AJS.$(printButton).insertBefore(prevElement);
+      return printButton;
+    }
+    
+    addNukeButton() {
+      let a = this;
+      let div = document.createElement('div');
+      div.style = 'position:absolute; top:5px; right: 5px;';
+      let button = document.createElement('button');
+      div.appendChild(button);
+      button.appendChild(createNukeIcon());
+      button.onclick = function(event) {
+        event.preventDefault();
+        if (confirm("This will delete all your saved awesomeness, are you sure?") === true) {
+          clearStorage();
+          let spanMessage = document.createElement('span');
+          spanMessage.innerHTML = 'Deleted! Refresh page to see.';
+          div.appendChild(spanMessage);
+        }
+      };
+      a.getContainer().style.position = 'relative'; //have to make container relative or button wont float
+      a.getContainer().appendChild(div);
+      return button;
     }
 
   }
@@ -141,7 +268,7 @@ function main() {
       if (valueSet) {
         successActions(a, i++);
       }
-      addSaveButton(a);
+      a.addSaveButton();
     });
     
   }
@@ -169,42 +296,7 @@ function createTrulyAwesomeDefaults(defaultsMap) {
     }
     awesomeDefaults.push(a);
   }
-  // return promise.then(function() {
   return awesomeDefaults;
-  // });
-}
-
-function setItemFromSuggestions(jiraObject, text, value, a) {
-  //unwrap any array structures jQuery val() might have wrapped since this is dealing with single values
-  if (Array.isArray(text)) {
-    text = text[0];
-  }
-  if (Array.isArray(value)) {
-    value = value[0];
-  }
-  //turn on 'aus-ss-edit' mode, which AJAX queries check before executing REST stuff
-  jiraObject.$container.addClass("aui-ss-editing");
-  jiraObject.$field.val(text); //set text value to limit suggestions
-  return Promise.resolve(jiraObject.requestSuggestions())  //converts jQuery deferred to ES6 promise
-    .then(function(suggestions){
-      jiraObject.$container.removeClass("aui-ss-editing");
-      jiraObject.$field.val(''); //clear text value since no longer needed for suggestions
-      //Epic Link seems to put it at the end of array, so search backwards through the suggestions[] instead until we find value match
-      for (let i=suggestions.length-1; i >= 0; i--) {
-        for (let j=0; j < suggestions[i].properties.items.length; j++) {
-          let item = suggestions[i].properties.items[j];
-          if (item.properties.value === value) {
-            //single-select
-            if (jiraObject.setSelection) {
-              jiraObject.setSelection(item);
-            } else { //multi-select
-              jiraObject.addItem(item);
-            }
-            return item;
-          }
-        }
-      }
-    });
 }
 
 function waitForCondition(f) {
@@ -218,95 +310,9 @@ function waitForCondition(f) {
   });
 }
 
-function addPrintButton(a, prevElement) {
-  let printButton = document.createElement('button');
-  let icon = document.createElement('i');
-  icon.className = 'fa fa-print fa-lg';
-  printButton.appendChild(icon);
-  printButton.onclick = function(event) {
-    event.preventDefault();
-    let saveMap = fetchStoredAwesomeDefaults();
-    alert ('Saved awesomeness:\n' + JSON.stringify(saveMap));
-  };
-  AJS.$(printButton).insertBefore(prevElement);
-  return printButton;
-}
-
-function addNukeButton(a) {
-  let div = document.createElement('div');
-  div.style = 'position:absolute; top:5px; right: 5px;';
-  let button = document.createElement('button');
-  div.appendChild(button);
-  button.appendChild(createNukeIcon());
-  button.onclick = function(event) {
-    event.preventDefault();
-    if (confirm("This will delete all your saved awesomeness, are you sure?") === true) {
-      clearStorage();
-      let spanMessage = document.createElement('span');
-      spanMessage.innerHTML = 'Deleted! Refresh page to see.';
-      div.appendChild(spanMessage);
-    }
-  };
-  a.getContainer().style.position = 'relative'; //have to make container relative or button wont float
-  a.getContainer().appendChild(div);
-  return button;
-}
-
 //stringify since works with arrays too
 function isEqual(a, b) {
   return (JSON.stringify(a) === JSON.stringify(b));
-}
-
-function addSaveButton(a) {
-  let saveButton = document.createElement('button');
-  //determine if it's a green locked icon or unlocked icon
-  let icon = null;
-  if (a.value && isEqual(a.value, a.getVal())) {
-    icon = createSavedIcon();
-  } else {
-    icon = createUnsavedIcon();
-  }
-  saveButton.appendChild(icon);
-  
-  let changeFunction = function(e) {
-    setTimeout(function() {
-      if (!a.value) {  //if nothing saved to begin with, dont bother
-        return;
-      }
-      if (!isEqual(a.value, a.getVal())) {
-        GM_log("Houston, we have a CHANGE from the original! Orig [" + a.value + "] and new [" + a.getVal() + "]");
-        a.saveButton.innerHTML = '';
-        a.saveButton.appendChild(createUnsavedIcon());
-        a.getContainer().style.backgroundColor = '#D3D3D3'; //light gray to indicate changed but unsaved
-      } else {
-        a.saveButton.innerHTML = '';
-        a.saveButton.appendChild(createSavedIcon());
-        a.getContainer().style.backgroundColor = '#98ff98'; //minty green
-      }
-    }, 20);
-  };
-  
-  //gray out box when value changes to indicate unsaved changes
-  AJS.$(a.textNode).bind('change', changeFunction);
-  AJS.$(a.valueNode).bind('selected unselect', changeFunction); //for multi-selects
-  
-  saveButton.onclick = function (event) {
-    event.preventDefault();
-    if (AJS.$(a.saveButton.firstChild).hasClass('fa-lock')) {
-      deleteAwesomeDefault(a);
-    } else if (AJS.$(a.saveButton.firstChild).hasClass('fa-unlock-alt')) {
-      saveAwesomeDefault(a);
-    }
-    
-  };
-  //visual fix for the longer fields so it inserts after parent rather than input node directly
-  if ( (AJS.$(a.textNode).hasClass('text') && AJS.$(a.textNode).parent().hasClass('long-field')) || (a.label === 'Priority')) {
-    AJS.$(a.textNode).parent().after("&nbsp;", saveButton);
-  } else {
-    AJS.$(a.textNode).nextUntil('div').andSelf().last().after("&nbsp;", saveButton);
-  }
-  a.saveButton = saveButton;
-  return saveButton;
 }
 
 function createSavedIcon() {
@@ -337,8 +343,8 @@ function delay(ms) {
 
 function successActions(a, i) {
   if (i === 0) {  //add nuke and print button to the first saved value
-    let nukeButt = addNukeButton(a);
-    addPrintButton(a, nukeButt);
+    let nukeButt = a.addNukeButton();
+    a.addPrintButton(nukeButt);
   }
   a.getContainer().style.backgroundColor = '#98ff98'; //make minty green
   a.labelNode.closest('.content').appendChild(a.getContainer());  //move to end
