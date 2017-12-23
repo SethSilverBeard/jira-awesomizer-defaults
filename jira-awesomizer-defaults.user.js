@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Jira Awesomizer Defaults
 // @namespace    https://github.com/SethSilverBeard
-// @version      1.0.1
+// @version      1.0.2
 // @description  Automatically fills in common JIRA values and allows you to override defaults
 // @author       SethSilverBeard
 // @require      https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/6.18.2/babel.js
@@ -34,12 +34,12 @@ var inline_src = (<><![CDATA[
       //DOM inputs corresponding to above, these arent ever serialized
       this.labelNode = labelNode;
       this.textNode = '';  //node corresponding to textbox
-      this.valueNode = document.querySelector('#' + labelNode.getAttribute("for"));//.split('-',1)[0]);
+      this.valueNode = document.querySelector('#' + labelNode.getAttribute("for").split(/-textarea|-field/)[0]);
       this.saveButton = '';
       this.promise = isVisiblePromise;  //add to object so anything time dependent can use it.
 
       if (!this.valueNode) {
-        GM_log('Warning: Label [' + this.label + '] points to inputField id [' + this.labelNode.getAttribute("for") + '] but this field doesnt exist....skipping field.');
+        GM_log('Warning: Label [' + this.label + '] points to inputField id [' + labelNode.getAttribute("for").split(/-textarea|-field/)[0] + '] but this field doesnt exist....skipping field.');
         return;
       }
       //This will branch off original promise, so they all run in parallel once summary is visible.
@@ -89,7 +89,6 @@ var inline_src = (<><![CDATA[
       let self = this;
 
       return p.then(function() {
-        console.log(self.text, "Invisible?", !AJS.$(self.textNode).is(":visible"));
         if (!self.text || !AJS.$(self.textNode).is(":visible")) { //do nothing on empty or invisible values
           return;
         }
@@ -132,22 +131,31 @@ var inline_src = (<><![CDATA[
           jiraObject.$field.val(''); //clear text value since no longer needed for suggestions
           //Epic Link seems to put it at the end of array, so search backwards through the suggestions[] instead until we find value match
           for (let i=suggestions.length-1; i >= 0; i--) {
-            debugger;
-            console.log(suggestions[i].properties.items);
-            for (let j=0; j < suggestions[i].properties.items.length; j++) {
-              let item = suggestions[i].properties.items[j];
+            if (suggestions[i].properties.items === undefined) {  //Jira 7.6.0 they put some of the inputs at top level, so no subitems
+              let item = suggestions[i];
               if (item.properties.value === value) {
-                //single-select
-                if (jiraObject.setSelection) {
-                  jiraObject.setSelection(item);
-                } else { //multi-select
-                  jiraObject.addItem(item);
+                return a.setItem(jiraObject, item);
+              }
+            } else {  //less than Jira 7.6.0, everything is in subitems
+              for (let j=0; j < suggestions[i].properties.items.length; j++) {
+                let item = suggestions[i].properties.items[j];
+                if (item.properties.value === value) {
+                  return a.setItem(jiraObject, item);
                 }
-                return item;
               }
             }
           }
         });
+    }
+
+    setItem(jiraObject, item) {
+      //single-select
+      if (jiraObject.setSelection) {
+        jiraObject.setSelection(item);
+      } else { //multi-select
+        jiraObject.addItem(item);
+      }
+      return item;
     }
 
     addSaveButton() {
