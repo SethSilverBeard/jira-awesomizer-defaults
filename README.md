@@ -33,4 +33,6 @@ Try running it manually by clicking the TamperMonkey icon and "Manually execute 
 3. Can I exclude fields from getting a save button?
 
 Yes, but you'll need to locally edit a line in the TamperMonkey script. Add the field name to the `excludedFields` variable at the top of the script. Currently excluded fields:
-```var excludedFields = ['Project', 'Issue Type', 'Summary', 'Create another'];```
+```javascript
+var excludedFields = ['Project', 'Issue Type', 'Summary', 'Create another'];
+```
