@@ -1,2 +1,7 @@
 .idea
 *.iml
+.vscode
+node_modules
+package-lock.json
+jsconfig.json
+.eslintrc
