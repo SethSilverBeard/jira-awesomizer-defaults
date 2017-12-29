@@ -22,15 +22,15 @@ How to Install
 
 FAQs
 ----------
-1. Shouldn't JIRA have this already?
+1. **Shouldn't JIRA have this already?**
 
 Yes! But they don't. It's been 13 years since someone requested this feature: https://jira.atlassian.com/browse/JRASERVER-4812. Rather than wait umpteen more years, I've created one for everyone to use today.
 
-2. It's not working!
+2. **It's not working!**
 
-Try running it manually by clicking the TamperMonkey icon and "Manually execute Jira Awesomizer!".  If this works, you probably need to update your `@include` directive in the script to match your JIRA website.
+Try running it manually by clicking the TamperMonkey icon and "Manually execute Jira Awesomizer!".  If this works, you probably need to update your `@include` directive in the script to match your JIRA website. Otherwise, please open an issue or send an e-mail to me (see screenshot above for my email)
 
-3. Can I exclude fields from getting a save button?
+3. **Can I exclude fields from getting a save button?**
 
 Yes, but you'll need to locally edit a line in the TamperMonkey script. Add the field name to the `excludedFields` variable at the top of the script. Currently excluded fields:
 ```javascript

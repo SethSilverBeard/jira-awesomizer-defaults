@@ -142,40 +142,6 @@ function fetchStoredAwesomeDefaults() {
   return new Map();
 }
 
-function deleteAwesomeDefault(a) {
-  let existingDefaultsMap = fetchStoredAwesomeDefaults();
-  existingDefaultsMap.delete(a.label);
-  GM_setValue("awesomeDefaults", JSON.stringify(existingDefaultsMap));
-  a.saveButton.innerHTML = '';
-  a.saveButton.appendChild(createUnsavedIcon());
-  a.getContainer().style.backgroundColor = ''; //remove any background color
-}
-
-function saveAwesomeDefault(a) {
-  if (Array.isArray(a.getText())) {
-    if (a.getText().length !== a.getVal().length) {
-      AJS.flag({
-        type: 'error',
-        title: 'Issue saving Awesome Default for ' + a.label,
-        body: 'Array length mismatch between text and backing value'
-      });
-      return;
-    }
-  }
-  a.text = a.getText();
-  a.value = a.getVal();
-  GM_log("Saving NEW default with text [" + a.text + "] and value [" + a.value + "]");
-  let existingDefaultsMap = fetchStoredAwesomeDefaults();
-  existingDefaultsMap.set(a.label, {
-    "label": a.label,
-    "text": a.getText(),
-    "value": a.getVal()
-  });
-  GM_setValue("awesomeDefaults", JSON.stringify(existingDefaultsMap));
-  a.saveButton.innerHTML = '';
-  a.saveButton.appendChild(createSavedIcon());
-  a.getContainer().style.backgroundColor = '#98ff98'; //make minty green
-}
 //global delete
 function clearStorage() {
   GM_deleteValue("awesomeDefaults");
@@ -352,9 +318,9 @@ class AwesomeDefault {
     saveButton.onclick = function (event) {
       event.preventDefault();
       if (AJS.$(a.saveButton.firstChild).hasClass('fa-lock')) {
-        deleteAwesomeDefault(a);
+        a.deleteAwesomeDefault();
       } else if (AJS.$(a.saveButton.firstChild).hasClass('fa-unlock-alt')) {
-        saveAwesomeDefault(a);
+        a.saveAwesomeDefault();
       }
       
     };
@@ -402,6 +368,43 @@ class AwesomeDefault {
     a.getContainer().style.position = 'relative'; //have to make container relative or button wont float
     a.getContainer().appendChild(div);
     return button;
+  }
+  
+  deleteAwesomeDefault() {
+    let a = this;
+    let existingDefaultsMap = fetchStoredAwesomeDefaults();
+    existingDefaultsMap.delete(a.label);
+    GM_setValue("awesomeDefaults", JSON.stringify(existingDefaultsMap));
+    a.saveButton.innerHTML = '';
+    a.saveButton.appendChild(createUnsavedIcon());
+    a.getContainer().style.backgroundColor = ''; //remove any background color
+  }
+  
+  saveAwesomeDefault() {
+    let a = this;
+    if (Array.isArray(a.getText())) {
+      if (a.getText().length !== a.getVal().length) {
+        AJS.flag({
+          type: 'error',
+          title: 'Issue saving Awesome Default for ' + a.label,
+          body: 'Array length mismatch between text and backing value'
+        });
+        return;
+      }
+    }
+    a.text = a.getText();
+    a.value = a.getVal();
+    GM_log("Saving NEW default with text [" + a.text + "] and value [" + a.value + "]");
+    let existingDefaultsMap = fetchStoredAwesomeDefaults();
+    existingDefaultsMap.set(a.label, {
+      "label": a.label,
+      "text": a.getText(),
+      "value": a.getVal()
+    });
+    GM_setValue("awesomeDefaults", JSON.stringify(existingDefaultsMap));
+    a.saveButton.innerHTML = '';
+    a.saveButton.appendChild(createSavedIcon());
+    a.getContainer().style.backgroundColor = '#98ff98'; //make minty green
   }
 }
 
