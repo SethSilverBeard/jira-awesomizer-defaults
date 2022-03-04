@@ -1,11 +1,12 @@
 // ==UserScript==
 // @name         Jira Awesomizer Defaults
 // @namespace    https://github.com/SethSilverBeard
-// @version      1.0.2
+// @version      1.0.3
+// @history      1.0.3 Supports latest JIRA version 8.22 (March 2022)
 // @description  Automatically fills in common JIRA values and allows you to override defaults
 // @author       SethSilverBeard
-// @require      https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/6.18.2/babel.js
-// @require      https://cdnjs.cloudflare.com/ajax/libs/babel-polyfill/6.16.0/polyfill.js
+// @downloadURL  https://github.com/SethSilverBeard/jira-awesomizer-defaults/raw/master/jira-awesomizer-defaults.user.js
+// @updateURL    https://github.com/SethSilverBeard/jira-awesomizer-defaults/raw/master/jira-awesomizer-defaults.user.js
 // @require      https://use.fontawesome.com/8fca914d55.js
 // @include      http://jira*.*
 // @include      https://jira*.*
@@ -17,14 +18,10 @@
 // @grant        GM_addStyle
 // @grant        GM_registerMenuCommand
 // ==/UserScript==
-
-/* jshint ignore:start */
-var inline_src = (<><![CDATA[
-  /* jshint ignore:end */
-  /* jshint esnext: false */
-  /* jshint esversion: 6 */
+'use strict';
   
-var excludedFields = ['Project', 'Issue Type', 'Summary', 'Create another'];
+var EXCLUDED_FIELDS = ['Project', 'Issue Type', 'Summary', 'Create another', 'Linked Issues', 'Issue'];
+var CONTENT_SELECTOR = '.jira-dialog-core-content';
 GM_addStyle('.green { color:green;}');
 GM_addStyle('.red { color:red;}');
 GM_registerMenuCommand('Manually execute Jira Awesomizer!', main);
@@ -34,7 +31,7 @@ AJS.$('#jira').on("initialized", function(e, jiraBackingObject) {
   AJS.$(e.target).data('jiraBackingObject', jiraBackingObject);
 });
 
-//Setup event listener so awesomizer runs when dialogs open/chang (works with issue type switches too!)
+//Setup event listener so awesomizer runs when dialogs open/change (works with issue type switches too!)
 JIRA.bind(JIRA.Events.NEW_CONTENT_ADDED, function(event,content,q) {
   let parentId = AJS.$(content).parent().attr('id');
   if ('create-issue-dialog' === parentId || 'create-subtask-dialog' === parentId) {
@@ -57,17 +54,29 @@ function main() {
   }
 }
 
+/**
+ * Creates fully initialized AwesomeDefault objects for each field that can have a default applied.
+ * 
+ * If pre-existing defaults exist, will populate the AWesomeDefault "text" and "value" properties with the same.
+ * 
+ * @param {} defaultsMap 
+ * @returns Array of fully initialized AwesomeDefault objects. 
+ */
 function createTrulyAwesomeDefaults(defaultsMap) {
   //setup promise which waits for the "Summary" element to be visible before trying to apply, so JIRA triggers all cascade properly
-  let promise = waitForCondition(function() { return AJS.$('.jira-dialog-content #summary').is(":visible :enabled");});
-  
+  let promise = waitForCondition(function() { return AJS.$(CONTENT_SELECTOR + ' #summary').is(":visible :enabled");});
   let awesomeDefaults = [];
   //find all labels on page
-  for (let labelNode of document.querySelectorAll('.jira-dialog-content label')) {
+  let labelSelector = CONTENT_SELECTOR + ' label';
+  let labelNodes = document.querySelectorAll(labelSelector);
+  if (labelNodes.length == 0) {
+      GM_log("Unable to locate any labels using document.querySelectorAll('" + labelSelector + "'). May need to update selector for newer JIRA version.");
+  }
+  for (let labelNode of labelNodes) {
     let a = new AwesomeDefault(labelNode, promise);
     //skip excluded fields like "summary"
     let labelKey = a.label;
-    if (excludedFields.indexOf(labelKey) > -1) {
+    if (EXCLUDED_FIELDS.indexOf(labelKey) > -1) {
       continue;
     }
     //load up possibly stored defaults for this one
@@ -124,6 +133,12 @@ function delay(ms) {
   });
 }
 
+/**
+ * After setting a pre-saved default value, make minty green and move to end of form so it's outta the way.
+ * 
+ * @param {*} a AwesomeDefault object.
+ * @param {*} i index of Saved item in the form.
+ */
 function successActions(a, i) {
   if (i === 0) {  //add nuke and print button to the first saved value
     let nukeButt = a.addNukeButton();
@@ -150,7 +165,7 @@ function clearStorage() {
 class AwesomeDefault {
 
   constructor(labelNode, isVisiblePromise) {
-    this.label = labelNode.textContent.replace(/Required$/,'');  //Label users see, such as 'Sprint', 'Division', 'Original Estimate', etc
+    this.label = labelNode.textContent.replace(/\s*Required\s*$/,'');  //Label users see, such as 'Sprint', 'Division', 'Original Estimate', etc
     this.text = '';  //Text as user sees it
     this.value = '';  //Value set which corresponds with text value above
 
@@ -179,7 +194,7 @@ class AwesomeDefault {
   }
       
   findPossibleTextBox(idLabelPointsTo) {
-    let possibleTextBox = (document.querySelector('.jira-dialog-content #' + idLabelPointsTo + '-textarea') || document.querySelector('.jira-dialog-content #' + idLabelPointsTo + '-field'));
+    let possibleTextBox = (document.querySelector(CONTENT_SELECTOR + ' #' + idLabelPointsTo + '-textarea') || document.querySelector(CONTENT_SELECTOR + ' #' + idLabelPointsTo + '-field'));
     if (!possibleTextBox) {
       return false;
     }
@@ -322,16 +337,28 @@ class AwesomeDefault {
       } else if (AJS.$(a.saveButton.firstChild).hasClass('fa-unlock-alt')) {
         a.saveAwesomeDefault();
       }
-      
     };
-    //visual fix for the longer fields so it inserts after parent rather than input node directly
-    if ( (AJS.$(a.textNode).hasClass('text') && AJS.$(a.textNode).parent().hasClass('long-field')) || (a.label === 'Priority')) {
-      AJS.$(a.textNode).parent().after("&nbsp;", saveButton);
-    } else {
-      AJS.$(a.textNode).nextUntil('div').andSelf().last().after("&nbsp;", saveButton);
-    }
     a.saveButton = saveButton;
+    this.insertSaveButtonOnPage(a);
     return saveButton;
+  }
+
+  /**
+   * Inserts save button (lock/unlock icon) in the HTML.
+   * 
+   */
+  insertSaveButtonOnPage() {
+    let a = this;
+    //visual fix for the longer fields so it inserts after parent rather than input node directly
+    GM_log(a.label + ': ' + AJS.$(a.textNode).parent().attr("class"));
+    if ( (AJS.$(a.textNode).hasClass('text') && AJS.$(a.textNode).parent().hasClass('long-field')) || (a.label === 'Priority')) {
+      AJS.$(a.textNode).parent().after("&nbsp;", a.saveButton);
+    } else if (AJS.$(a.textNode).hasClass('textarea')) {
+      // insert after the entire textarea group so save button isnt dangling.
+      AJS.$(a.textNode).parents('.field-group').first().append("&nbsp;", a.saveButton);
+    } else {
+      AJS.$(a.textNode).nextUntil('div').addBack().last().after("&nbsp;", a.saveButton);
+    }
   }
 
   addPrintButton(prevElement) {
@@ -407,9 +434,3 @@ class AwesomeDefault {
     a.getContainer().style.backgroundColor = '#98ff98'; //make minty green
   }
 }
-
-/* jshint ignore:start */
-]]></>).toString();
-var c = Babel.transform(inline_src, { presets: [ "es2015", "es2016" ] });
-eval(c.code);
-/* jshint ignore:end */

@@ -10,7 +10,7 @@ A TamperMonkey (GreaseMonkey) script that fills in fields automatically when you
 
 What fields does it support?
 ------------
-Every field I could find and test against, including multi-select and single-select. Tested with versions 7.3.4 - 7.6.0
+Every field I could find and test against, including multi-select and single-select. Tested with versions 8.22.
 
 How to Install
 ------------
@@ -36,3 +36,7 @@ Yes, but you'll need to locally edit a line in the TamperMonkey script. Add the 
 ```javascript
 var excludedFields = ['Project', 'Issue Type', 'Summary', 'Create another'];
 ```
+
+4. **Can I change defaults based on Issue Type or similar?**
+
+No, currently this only supports a single set of defaults across your JIRA instance.
