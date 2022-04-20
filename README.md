@@ -28,7 +28,7 @@ Yes! But they don't. It's been 13 years since someone requested this feature: ht
 
 2. **It's not working!**
 
-Try running it manually by clicking the TamperMonkey icon and "Manually execute Jira Awesomizer!".  If this works, you probably need to update your `@include` directive in the script to match your JIRA website. Otherwise, please open an issue or send an e-mail to me (see screenshot above for my email)
+Try running it manually by clicking the TamperMonkey icon and "Manually execute Jira Awesomizer!".  If you don't see this option or the script isn't enabled, update your `@include` directive in the script to match your JIRA website. Otherwise, please open an issue or send an e-mail to me (see screenshot above for my email)
 
 3. **Can I exclude fields from getting a save button?**
 
