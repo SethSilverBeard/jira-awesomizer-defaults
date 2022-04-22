@@ -1,7 +1,8 @@
 // ==UserScript==
 // @name         Jira Awesomizer Defaults
 // @namespace    https://github.com/SethSilverBeard
-// @version      1.0.3
+// @version      1.0.4
+// @history      1.0.4 Fixed bug #4 where stored values serialized as empty map instead of actual values.
 // @history      1.0.3 Supports latest JIRA version 8.22 (March 2022)
 // @description  Automatically fills in common JIRA values and allows you to override defaults
 // @author       SethSilverBeard
@@ -25,6 +26,7 @@ var CONTENT_SELECTOR = '.jira-dialog-core-content';
 GM_addStyle('.green { color:green;}');
 GM_addStyle('.red { color:red;}');
 GM_registerMenuCommand('Manually execute Jira Awesomizer!', main);
+GM_registerMenuCommand('Delete stored values', clearStorage);
 
 //put the Jira backing object as a "data" element on the field so can access it later.  Good for fancy fields like multi-select and single-select
 AJS.$('#jira').on("initialized", function(e, jiraBackingObject) {
@@ -370,7 +372,7 @@ class AwesomeDefault {
     printButton.onclick = function(event) {
       event.preventDefault();
       let saveMap = fetchStoredAwesomeDefaults();
-      alert ('Saved awesomeness:\n' + JSON.stringify(saveMap));
+      alert ('Saved awesomeness:\n' + JsonStringifyMap(saveMap));
     };
     AJS.$(printButton).insertBefore(prevElement);
     return printButton;
@@ -401,7 +403,7 @@ class AwesomeDefault {
     let a = this;
     let existingDefaultsMap = fetchStoredAwesomeDefaults();
     existingDefaultsMap.delete(a.label);
-    GM_setValue("awesomeDefaults", JSON.stringify(existingDefaultsMap));
+    GM_setValue("awesomeDefaults", JsonStringifyMap(existingDefaultsMap));
     a.saveButton.innerHTML = '';
     a.saveButton.appendChild(createUnsavedIcon());
     a.getContainer().style.backgroundColor = ''; //remove any background color
@@ -428,9 +430,20 @@ class AwesomeDefault {
       "text": a.getText(),
       "value": a.getVal()
     });
-    GM_setValue("awesomeDefaults", JSON.stringify(existingDefaultsMap));
+    GM_setValue("awesomeDefaults", JsonStringifyMap(existingDefaultsMap));
     a.saveButton.innerHTML = '';
     a.saveButton.appendChild(createSavedIcon());
     a.getContainer().style.backgroundColor = '#98ff98'; //make minty green
   }
+}
+
+/**
+ * JSON stringify map is unreliable, so convert to Array tuples first and Map is happy.
+ * 
+ * See https://stackoverflow.com/a/53461519.
+ * 
+ * @param {Map} m The map to serialize to JSON string
+ */
+function JsonStringifyMap(m) {
+  return JSON.stringify(Array.from(m.entries()));
 }
